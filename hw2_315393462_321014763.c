@@ -29,6 +29,8 @@ struct job_node * head;
 struct job_node * tail;
 pthread_mutex_t mutex=PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t available_job=PTHREAD_COND_INITIALIZER;
+pthread_cond_t empty_job_queue=PTHREAD_COND_INITIALIZER;
+
 
 void create_num_counters_file(int num_counters) //part of dispatcher initiallization //need to change num_counters to long long? 
 //created num counter file with "0" inside
@@ -60,8 +62,23 @@ struct job_node* find_job_to_take(struct job_node *head)
 {
     while (head->next!=NULL)
         head=head->next;
-    printf("the last is %s\n", head->job_text);
+    //printf("the last is %s\n", head->job_text);
     return head;
+}
+struct job_node* delete_and_free_last(struct job_node *head)
+{
+    struct job_node *second_last=head, *last=head;
+    if (second_last->next==NULL) //only one element in linked list
+    {
+        printf("the only element is %s", head->job_text);
+        return head;
+    }
+    while (second_last->next->next!=NULL)
+        second_last=second_last->next;
+    printf("the second last is %s the last is %s\n", second_last->job_text, second_last->next->job_text);
+    last=second_last->next;
+    second_last->next=NULL;
+    return last;
 }
 void * thread_func(void *arg) //need to go through it, Gadis implemintation as part of creating new thread, gets an error 
 {
@@ -72,11 +89,14 @@ void * thread_func(void *arg) //need to go through it, Gadis implemintation as p
     while (1)
     {
         pthread_mutex_lock(&mutex);
-        while (head == NULL) pthread_cond_wait(&available_job, &mutex);
+        while (head == NULL)
+        {
+        pthread_cond_wait(&available_job, &mutex);}
         struct job_node *last = head;
-        last=find_job_to_take(last); //now last is the last node in the queue - the job we take
+        last=delete_and_free_last(head); //now last is the last node in the queue - the job we take
         printf("thread %d woke up and took: %s\n", thread_id, last->job_text);
         free(last);
+        pthread_cond_signal(&empty_job_queue);
         pthread_mutex_unlock(&mutex);
     }
 }
@@ -144,19 +164,19 @@ void dispatcher_work(FILE *commands_file)
                         ptr->next=head;
                     }
                 head = ptr;
-                
                 pthread_cond_signal(&available_job);
                 pthread_mutex_unlock(&mutex);
             }
         else
             printf("this line is not recognized: %s\n", word);
     }
-    printf("\n\nList elements are - \n");
-    struct job_node* temp=head;
-    while(temp != NULL) {
-        printf("%s --->",temp->job_text);
-        temp = temp->next;}
-    //sleep(15);
+    // printf("\n\nList elements are - \n");
+    // struct job_node* temp=head;
+    // while(temp != NULL) {
+    //     printf("%s --->",temp->job_text);
+    //     temp = temp->next;}
+    
+    sleep(20);
     // I want to wait for all workers to finish here, how do we implement that?
     fclose(commands_file);
 }
