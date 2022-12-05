@@ -25,37 +25,41 @@ struct job_node // I implemented the job queue as connected list
 } job_node;
 
 struct job_node * head;
-struct job_node * tail;
-pthread_mutex_t mutex=PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t mutex;
 pthread_cond_t available_job=PTHREAD_COND_INITIALIZER;
 pthread_cond_t empty_job_queue=PTHREAD_COND_INITIALIZER;
 
-
-void create_num_counters_file(int num_counters) //part of dispatcher initiallization //need to change num_counters to long long? 
+FILE * create_num_counters_file(int num_counters) //part of dispatcher initiallization //need to change num_counters to long long? 
 //created num counter file with "0" inside
+//currently supports only one file, need to work with array of files.
 {
-    FILE *num_cntr_file;
+    FILE *cntr_file_array[MAX_NUM_COUNTER];
     char filename[12];
-    if (num_counters < 10)
+    for (int i=0; i<num_counters; i++)
     {
-        snprintf(filename, 12, "count0%d.txt", num_counters);
-        printf("counter file that was made: %s\n", filename);
-        //num_cntr_file = fopen()
-    }
-    else 
-    {
-        snprintf(filename, 12, "count%d.txt", num_counters);
-        printf("counter file that was made: %s\n", filename);
-    }
+        if (i < 10)
+        {
+            snprintf(filename, 12, "count0%d.txt", i);
+            printf("counter file that was made: %s\n", filename);
+            //cntr_file_array = fopen()
+        }
+        else 
+        {
+            snprintf(filename, 12, "count%d.txt", i);
+            printf("counter file that was made: %s\n", filename);
+        }
 
-    num_cntr_file = fopen(filename, "w");
-    if (num_cntr_file == NULL)
-    {
-        printf("Failed creating counter file\n"); 
-        exit(1);
-    }
+        cntr_file_array[i] = fopen(filename, "w");
+        if (cntr_file_array[i] == NULL)
+        {
+            printf("Failed creating counter file\n"); 
+            exit(1);
+        }
 
-    fputs("0\0", num_cntr_file);
+        fputs("0\0", *cntr_file_array);
+    }
+    
+    return cntr_file_array[0];
 }
 
 struct job_node* delete_and_free_last(struct job_node *head)
@@ -75,16 +79,18 @@ struct job_node* delete_and_free_last(struct job_node *head)
 }
 void * thread_func(void *arg) //need to go through it, Gadis implemintation as part of creating new thread, gets an error 
 {
+    
     struct thread_data_s* td = (struct thread_data_s *)arg;
     int i=0, thread_id, *answer;
     thread_id = td->thread_id;
    
     while (1)
     {
-        pthread_mutex_lock(&mutex);
-        while (head == NULL)
-        {
-        pthread_cond_wait(&available_job, &mutex);}
+        
+        if (pthread_mutex_lock(&mutex))
+            printf("lock failed\n");    
+        
+        while (head == NULL) pthread_cond_wait(&available_job, &mutex);
         struct job_node *last = head;
         last=delete_and_free_last(head); //now last is the last node in the queue - the job we take
         printf("thread %d woke up and took: %s\n", thread_id, last->job_text);
@@ -92,16 +98,25 @@ void * thread_func(void *arg) //need to go through it, Gadis implemintation as p
         if (head==last)
             head=NULL;
         //pthread_cond_signal(&empty_job_queue);
-        pthread_mutex_unlock(&mutex);
+        //printf("this is %d\n", thread_id);
+        if (pthread_mutex_unlock(&mutex))
+            printf("unlock failed %d\n", thread_id);
+
     }
 }
 
-void initialize_dispatcher(int num_of_threads)
+void initialize_dispatcher(int num_of_threads, int num_of_files, FILE * file_array)
 {
     pthread_t tid; 
     pthread_attr_t attr; 
     struct thread_data_s thread_data;
-    pthread_mutex_lock(&mutex);
+
+    //FILE *cntr_file_array[MAX_NUM_COUNTER];
+    
+    file_array=create_num_counters_file(num_of_files);
+    fputs("check\0", file_array);
+
+    //pthread_mutex_lock(&mutex);
     for (int i=0; i<num_of_threads; i++)
         {
         thread_data.thread_id =i;
@@ -109,8 +124,10 @@ void initialize_dispatcher(int num_of_threads)
         
         printf("we created thread number %d!! :)\n", i);
         
-        //pthread_join(tid, (void**)&result);
+        //pthread_join(tid, NULL);
         }
+    //file_array = cntr_file_array;
+    
 }
 char* parse_line(char *line, char *word)
 {
@@ -145,7 +162,7 @@ void dispatcher_work(FILE *commands_file)
             }
         if (!strcmp(word, "worker"))
             {
-                //pthread_mutex_lock(&mutex);
+                pthread_mutex_lock(&mutex);
                 printf ("we inserted %d worker jobs\n", line_counter);
                 
                 ptr = (struct job_node*)malloc(sizeof(job_node));
@@ -159,8 +176,9 @@ void dispatcher_work(FILE *commands_file)
                         ptr->next=head;
                     }
                 head = ptr;
-                pthread_cond_signal(&available_job);
+                
                 pthread_mutex_unlock(&mutex);
+                pthread_cond_signal(&available_job);
             }
         else
             printf("this line is not recognized: %s\n", word);
@@ -178,7 +196,9 @@ void dispatcher_work(FILE *commands_file)
 int main(int argc, char **argv)
 {
     FILE *read_file; 
-    
+    if (pthread_mutex_init(&mutex, NULL) != 0) {
+        printf("\n mutex init has failed\n");
+        return 1;}
     read_file = fopen(argv[1], "r"); 
     if (read_file == NULL)
     {
@@ -192,10 +212,12 @@ int main(int argc, char **argv)
         exit(-1);
     }
     int num_of_threads = atoi(argv[2]); //num threads that are created according to command
+    int num_of_files = atoi(argv[3]);
     int *result;
-    create_num_counters_file(atoi(argv[3]));
-    initialize_dispatcher(num_of_threads); //currently only creates required number of threads
     
+    FILE *file_array;
+    initialize_dispatcher(num_of_threads, num_of_files, file_array); //currently only creates required number of threads
+    //fputs("0\0", file_array[0]);
     dispatcher_work(read_file);
 
 }
