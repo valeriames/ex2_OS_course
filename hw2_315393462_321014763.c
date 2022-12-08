@@ -29,11 +29,11 @@ pthread_mutex_t mutex;
 pthread_cond_t available_job=PTHREAD_COND_INITIALIZER;
 pthread_cond_t empty_job_queue=PTHREAD_COND_INITIALIZER;
 
-FILE * create_num_counters_file(int num_counters) //part of dispatcher initiallization //need to change num_counters to long long? 
+FILE* *create_num_counters_file(int num_counters) //part of dispatcher initiallization //need to change num_counters to long long? 
 //created num counter file with "0" inside
 //currently supports only one file, need to work with array of files.
 {
-    FILE *cntr_file_array[MAX_NUM_COUNTER];
+    static FILE *cntr_file_array[MAX_NUM_COUNTER];
     char filename[12];
     for (int i=0; i<num_counters; i++)
     {
@@ -56,10 +56,10 @@ FILE * create_num_counters_file(int num_counters) //part of dispatcher initialli
             exit(1);
         }
 
-        fputs("0\0", *cntr_file_array);
+        fputs("0\0", cntr_file_array[i]);
     }
     
-    return cntr_file_array[0];
+    return cntr_file_array;
 }
 
 struct job_node* delete_and_free_last(struct job_node *head)
@@ -105,7 +105,7 @@ void * thread_func(void *arg) //need to go through it, Gadis implemintation as p
     }
 }
 
-void initialize_dispatcher(int num_of_threads, int num_of_files, FILE * file_array)
+void initialize_dispatcher(int num_of_threads, int num_of_files, FILE ** file_array)
 {
     pthread_t tid; 
     pthread_attr_t attr; 
@@ -114,7 +114,11 @@ void initialize_dispatcher(int num_of_threads, int num_of_files, FILE * file_arr
     //FILE *cntr_file_array[MAX_NUM_COUNTER];
     
     file_array=create_num_counters_file(num_of_files);
-    fputs("check\0", file_array);
+
+    //check that you can access all files:
+    //for (int j = 0; j< num_of_files; j++)
+        //fputs("check\0", *(file_array+j));
+    //////////////////////////////////////
 
     //pthread_mutex_lock(&mutex);
     for (int i=0; i<num_of_threads; i++)
@@ -144,7 +148,23 @@ char* parse_line(char *line, char *word)
     return line;
 }
 
-void dispatcher_work(FILE *commands_file)
+void execute_worker_command(FILE **file_array, char* command) 
+{
+    char *line_ptr;
+    if (!strstr(command, "increment") || !strstr(command, "decrement"))
+    {
+        //DO STUFF
+        //line_ptr=strtok(" ", NULL);
+
+    }
+    
+    if (!strstr(command, "repeat"))
+    {
+        //DO STUFF
+    }
+}
+
+void dispatcher_work(FILE *commands_file, FILE **file_array)
 {
     char line[MAX_LINE_LENGTH];
     char word[MAX_LINE_LENGTH]; //this will be a list of words in the specific line
@@ -155,16 +175,33 @@ void dispatcher_work(FILE *commands_file)
         strcpy(line,parse_line(line, word));
         line_counter+=1;
         if (!strcmp(word, "dispatcher_msleep"))
-            //sleep(atoi(words[1])/1000); // TODO: check the '\n' doesn't breaks it
+        {
+            //printf("num is: %d\n", atoi(line));
+            sleep(atoi(line)/1000); // TODO: check the '\n' doesn't breaks it 
+        }
+
         if (!strcmp(word, "dispatcher_wait"))
             {
                 printf("not supported yet");
             }
-        if (!strcmp(word, "worker"))
+
+        else if (!strcmp(word, "worker"))
             {
                 pthread_mutex_lock(&mutex);
                 printf ("we inserted %d worker jobs\n", line_counter);
+                //printf("command is: %s\n", line);
+
+                char *line_ptr;
+                line_ptr = strtok(line, ";");
+                while(line_ptr != NULL) //executes worker commands
+                {
+                    printf("command is: %s\n", line_ptr);
+                    execute_worker_command(file_array, line_ptr);
+                    line_ptr = strtok(NULL, ";");
+                }
                 
+
+
                 ptr = (struct job_node*)malloc(sizeof(job_node));
                 strcpy(ptr->job_text,line);
                 if (head==NULL)
@@ -215,10 +252,10 @@ int main(int argc, char **argv)
     int num_of_files = atoi(argv[3]);
     int *result;
     
-    FILE *file_array;
+    FILE **file_array;
     initialize_dispatcher(num_of_threads, num_of_files, file_array); //currently only creates required number of threads
     //fputs("0\0", file_array[0]);
-    dispatcher_work(read_file);
+    dispatcher_work(read_file, file_array);
 
 }
 //to myself - the linked list is not working because the "job_data" is only a pointer and the actual string is in the stack
