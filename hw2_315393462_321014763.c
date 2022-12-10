@@ -100,14 +100,12 @@ void * thread_func(void *arg) //need to go through it, Gadis implemintation as p
         last=delete_and_free_last(head); //now last is the last node in the queue - the job we take
         
         
-        char *line=malloc(MAX_LINE_LENGTH*sizeof(char));
+        char line[MAX_LINE_LENGTH];
         strcpy(line, last->job_text);
         //printf("thread %d woke up and took: %s\n", thread_id, line);
         // printf("the line we want to execute %s\n", last->job_text);
         // parse_worker_line(last->job_text);
-        printf("the line we want to execute %s\n", line);
-        parse_worker_line(line);
-        free(line);
+        
         free(last);
         if (head==last)
             head=NULL;
@@ -117,7 +115,8 @@ void * thread_func(void *arg) //need to go through it, Gadis implemintation as p
             printf("unlock failed %d\n", thread_id);
         
         //we start working on the command only after unlocking the queue mutex
-        
+        printf("the line we want to execute %s\n", line);
+        parse_worker_line(line);
         busy_list[thread_id]=false;
         pthread_cond_signal(&dispatcher_wait);
     }
@@ -194,14 +193,15 @@ void increment_decrement_or_sleep(char *work, int integer)
 void parse_worker_line(char *command)
 {
     char *line_ptr;
-    line_ptr = strtok(command, ";");
+    char *remain=command;
+    line_ptr = strtok_r(command, ";", &remain);
     
     while(line_ptr != NULL)
     {   
 
         //printf("next command is %s\n", line_ptr);
         execute_worker_command(line_ptr);
-        line_ptr = strtok(NULL, ";");
+        line_ptr = strtok_r(NULL, ";", &remain);
     }
 
     
@@ -309,7 +309,7 @@ void dispatcher_work(FILE *commands_file)
     //cmd file ended
     //we implement the waiting at end of file using the the dispatcher wait
     dispatcher_execute("dispatcher_wait", NULL);
-    sleep(1);
+    sleep(5);
     fclose(commands_file);
     printf("\n\nwe finished running !!!!\n\n");
 }
