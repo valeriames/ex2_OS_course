@@ -10,6 +10,7 @@
 #define MAX_NUM_THREADS 4096
 #define MAX_LINE_LENGTH 1024
 
+int num_of_files;
 void parse_worker_line(char *command);
 void execute_worker_command(char command[MAX_LINE_LENGTH]) ;
 struct thread_data_s  //this is the data the thread gets when it is made
@@ -57,6 +58,9 @@ FILE* *create_num_counters_file(int num_counters) //part of dispatcher initialli
         }
 
         fputs("0\0", cntr_file_array[i]);
+        //char check[MAX_LINE_LENGTH];
+        //fgets(check, MAX_LINE_LENGTH, cntr_file_array[i]);
+        //printf("CHECKING FILE:%s\n\n\n", check);
     }
     
     return cntr_file_array;
@@ -79,7 +83,7 @@ struct job_node* delete_and_free_last(struct job_node *head)
 }
 void * thread_func(void *arg) //need to go through it, Gadis implemintation as part of creating new thread, gets an error 
 {
-    // for (int j = 0; j< 4; j++)
+     //for (int j = 0; j< 4; j++)
     //     {fputs("check\0", file_array[j]);
     //     printf("%s", "check written");
     //     }
@@ -112,7 +116,7 @@ void * thread_func(void *arg) //need to go through it, Gadis implemintation as p
     }
 }
 
-void initialize_dispatcher(int num_of_threads, int num_of_files, FILE ** file_array)
+void initialize_dispatcher(int num_of_threads, int num_of_files)
 {
     pthread_t tid; 
     pthread_attr_t attr; 
@@ -148,29 +152,35 @@ char* parse_line(char *line, char *word, char *pattern)
     return line;
 }
 
-void increment_or_decrement(FILE **file_array, char *work, int integer)
+void increment_or_decrement(char *work, int integer)
 {
     char num[MAX_LINE_LENGTH]; 
-    char updated_num[MAX_LINE_LENGTH];
-    
-    fgets(num, MAX_LINE_LENGTH, file_array[integer]);
-    printf("num is: %s\n", num);
-    //strcpy(updated_num,parse_line(num, updated_num, 0));
 
+    if (integer>num_of_files-1)
+    {
+        printf("integer of worker command %s is %d and is bigger than number of count files %d\n", work, integer, num_of_files);
+        //while(fgets(num, MAX_LINE_LENGTH, file_array[integer]))
+        //{
+        //    printf("NUM IS:%s\n\n\n", num);
+        //}
+    }
 
+    else
+    {
+        printf("checking that can access file num %d\n", integer);
+
+        
+    }
     //fputs("valeria: check\n", *(file_array+integer));
 
 }
 void parse_worker_line(char *command)
 {
-    // why do we need line_exec?
     char *line_ptr;
-    char line_exec[MAX_LINE_LENGTH]; 
     line_ptr = strtok(command, ";");
     
     while(line_ptr != NULL)
     {   
-        //strcpy(line_exec, line_ptr);
         printf("next command is %s\n", line_ptr);
         execute_worker_command(line_ptr);
         line_ptr = strtok(NULL, ";");
@@ -181,19 +191,6 @@ void parse_worker_line(char *command)
 }
 void execute_worker_command(char command[MAX_LINE_LENGTH]) 
 {
-    
-    //char *work, *integer; 
-    // char* comm_string = malloc(sizeof(char)*strlen(command));
-    // if (comm_string == NULL)
-    // {
-    //     printf("failed allocating mem for worker\n");
-    //     exit(1);
-    // }
-
-    //else 
-        //strcpy(comm_string, command);
-
-
     while(command[0] == 32) //whitespace in ascii, removes whitespaces at start of sentence 
     {
         //printf("entered loop %s\n", command);
@@ -210,12 +207,13 @@ void execute_worker_command(char command[MAX_LINE_LENGTH])
     {
         //DO STUFF
         printf("work is: %s, integer is: %s\n", "increment", num);
-        increment_or_decrement(file_array, "increment", atoi(num));
+        char num_file[MAX_LINE_LENGTH];
+        increment_or_decrement("increment", atoi(num));
     }
-    if (strstr(command, "decrement"))
+    else if (strstr(command, "decrement"))
     {
         printf("work is: %s, integer is: %s\n", "decrement", num);
-        increment_or_decrement(file_array, "decrement", atoi(num));
+        increment_or_decrement("decrement", atoi(num));
     }
 
     // else if (strstr(comm_string, "repeat"))
@@ -227,7 +225,7 @@ void execute_worker_command(char command[MAX_LINE_LENGTH])
     // // free(comm_string);
 }
 
-void dispatcher_work(FILE *commands_file, FILE **file_array)
+void dispatcher_work(FILE *commands_file)
 {
     char line[MAX_LINE_LENGTH];
     char word[MAX_LINE_LENGTH]; //this will be a list of words in the specific line
@@ -255,19 +253,6 @@ void dispatcher_work(FILE *commands_file, FILE **file_array)
         else if (!strcmp(word, "worker"))
             {
                 pthread_mutex_lock(&mutex);
-                //printf ("we inserted %d worker jobs\n", line_counter);
-
-                // char *line_ptr;
-                // char line_exec[MAX_LINE_LENGTH]; 
-                // line_ptr = strtok(line, ";");
-                
-                // while(line_ptr != NULL)
-                // {   
-                //     strcpy(line_exec, line_ptr);
-                //     execute_worker_command(file_array, line_exec);
-                //     line_ptr = strtok(NULL, ";");
-                // }
-
 
                 ptr = (struct job_node*)malloc(sizeof(job_node));
                 strcpy(ptr->job_text,line);
@@ -317,13 +302,13 @@ int main(int argc, char **argv)
         exit(-1);
     }
     int num_of_threads = atoi(argv[2]); //num threads that are created according to command
-    int num_of_files = atoi(argv[3]);
+    num_of_files = atoi(argv[3]);
     //int *result;
     
     file_array=create_num_counters_file(num_of_files);
-    initialize_dispatcher(num_of_threads, num_of_files, file_array); //currently only creates required number of threads
+    initialize_dispatcher(num_of_threads, num_of_files); //currently only creates required number of threads
     //fputs("valeria check \n", *file_array);
-    dispatcher_work(read_file, file_array);
+    dispatcher_work(read_file);
 
 }
 //to myself - the linked list is not working because the "job_data" is only a pointer and the actual string is in the stack
