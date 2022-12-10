@@ -34,33 +34,37 @@ pthread_cond_t dispatcher_wait=PTHREAD_COND_INITIALIZER;
 FILE **file_array;
 bool busy_list[MAX_NUM_THREADS]={false}; // this array tells us if a thread is working
 
-FILE* *create_num_counters_file(int num_counters) //part of dispatcher initiallization //need to change num_counters to long long? 
+FILE* *create_counter_files(int counter, int flag) //part of dispatcher initiallization //need to change counter to long long?  //flag: 0 for counter file, 1 for thread file
 //created num counter file with "0" inside
 {
-    static FILE *cntr_file_array[MAX_NUM_COUNTER];
+    static FILE *file_array[MAX_NUM_COUNTER];
     char filename[12];
-    for (int i=0; i<num_counters; i++)
+    char file_type[8]; 
+    if (flag == 0) strcpy(file_type, "count"); 
+    else if (flag ==1) strcpy(file_type, "thread");
+
+    for (int i=0; i<counter; i++)
     {
         if (i < 10)
-            snprintf(filename, 12, "count0%d.txt", i);
+            snprintf(filename, 24, "%s0%d.txt",file_type, i);
         else 
-            snprintf(filename, 12, "count%d.txt", i);
+            snprintf(filename, 24, "%s%d.txt",file_type, i);
 
-        cntr_file_array[i] = fopen(filename, "w+");
-        if (cntr_file_array[i] == NULL)
+        file_array[i] = fopen(filename, "w+");
+        if (file_array[i] == NULL)
         {
             printf("Failed creating counter file\n"); 
             exit(1);
         }
 
-        fputs("0\0", cntr_file_array[i]);
-        rewind(cntr_file_array[i]);
+        fputs("0\0", file_array[i]);
+        rewind(file_array[i]);
         //char check[MAX_LINE_LENGTH];
-        //fgets(check, MAX_LINE_LENGTH, cntr_file_array[i]);
+        //fgets(check, MAX_LINE_LENGTH, file_array[i]);
         //printf("CHECKING FILE:%s\n\n\n", check);
     }
     
-    return cntr_file_array;
+    return file_array;
 }
 
 struct job_node* delete_and_free_last(struct job_node *head)
@@ -80,11 +84,6 @@ struct job_node* delete_and_free_last(struct job_node *head)
 }
 void * thread_func(void *arg) //need to go through it, Gadis implemintation as part of creating new thread, gets an error 
 {
-     //for (int j = 0; j< 4; j++)
-    //     {fputs("check\0", file_array[j]);
-    //     printf("%s", "check written");
-    //     }
-
     struct thread_data_s* td = (struct thread_data_s *)arg;
     int i=0, thread_id, *answer;
     thread_id = td->thread_id;
@@ -129,8 +128,8 @@ void initialize_dispatcher(int num_of_threads, int num_of_files)
     pthread_t tid; 
     pthread_attr_t attr; 
     struct thread_data_s thread_data;
-
-    //FILE *cntr_file_array[MAX_NUM_COUNTER];
+    int flag = 1; //for create_counter_files to handle it as thread files
+    //FILE *file_array[MAX_NUM_COUNTER];
 
 
     //pthread_mutex_lock(&mutex);
@@ -143,7 +142,7 @@ void initialize_dispatcher(int num_of_threads, int num_of_files)
         
         //pthread_join(tid, NULL);
         }
-    
+    create_counter_files(num_of_threads, flag);
 }
 char* parse_line(char *line, char *word, char *pattern)
 {
@@ -259,15 +258,12 @@ bool check_busy()
 void dispatcher_execute(char *word, char*line)
 {
     struct job_node* ptr =NULL;
-    if (!strcmp(word, "dispatcher_msleep")) //i think that it should appear with format such as: "worker msleep 5; increment 3;" 
-                                                //so the comparison should probably inside "if" condition on "worker"
-                                                //according to: moodle.tau.ac.il/mod/forum/discuss.php?d=20668
+    if (!strcmp(word, "dispatcher_msleep"))
         {
-            //printf("num is: %d\n", atoi(line));
             sleep(atoi(line)/1000); 
         }
 
-    if (!strcmp(word, "dispatcher_wait")) //same note as privous on msleep
+    if (!strcmp(word, "dispatcher_wait"))
         {
             bool flag = false;
             pthread_mutex_lock(&mutex);
@@ -345,10 +341,9 @@ int main(int argc, char **argv)
     int num_of_threads = atoi(argv[2]); //num threads that are created according to command
     num_of_files = atoi(argv[3]);
     //int *result;
-    
-    file_array=create_num_counters_file(num_of_files);
-    initialize_dispatcher(num_of_threads, num_of_files); //currently only creates required number of threads
-    //fputs("valeria check \n", *file_array);
+    int flag = 0; //for create_counter_files to handle it for counter files 
+    file_array=create_counter_files(num_of_files, flag);
+    initialize_dispatcher(num_of_threads, num_of_files); //creates required number of threads
     dispatcher_work(read_file);
 
 }
