@@ -1,3 +1,0 @@
-worker increment 1; increment1; 
-
-worker increment 5; increment 5;

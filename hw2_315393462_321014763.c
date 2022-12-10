@@ -5,13 +5,14 @@
 #include <math.h>
 #include <stdbool.h>
 #include <unistd.h>
+#include <sys/time.h>
 
 #define MAX_NUM_COUNTER 100
 #define MAX_NUM_THREADS 4096
 #define MAX_LINE_LENGTH 1024
 
 int num_of_files;
-void parse_worker_line(char *command);
+void parse_worker_line(char *command, struct timeval time, int thread_id);
 void execute_worker_command(char command[MAX_LINE_LENGTH]) ;
 struct thread_data_s  //this is the data the thread gets when it is made
 {
@@ -33,6 +34,7 @@ pthread_cond_t available_job=PTHREAD_COND_INITIALIZER;
 pthread_cond_t dispatcher_wait=PTHREAD_COND_INITIALIZER;
 FILE **file_array, **thread_array, *dispatcher_file;
 bool busy_list[MAX_NUM_THREADS]={false}; // this array tells us if a thread is working
+struct timeval start_time;
 
 FILE* *create_counter_files(int counter, int flag) //part of dispatcher initiallization //need to change counter to long long?  //flag: 0 for counter file, 1 for thread file
 //created num counter file with "0" inside
@@ -97,6 +99,7 @@ struct job_node* delete_and_free_last(struct job_node *head)
 void * thread_func(void *arg) //need to go through it, Gadis implemintation as part of creating new thread, gets an error 
 {
     struct thread_data_s* td = (struct thread_data_s *)arg;
+    struct timeval stop_time; 
     int i=0, thread_id, *answer;
     thread_id = td->thread_id;
    
@@ -127,8 +130,9 @@ void * thread_func(void *arg) //need to go through it, Gadis implemintation as p
             printf("unlock failed %d\n", thread_id);
         
         //we start working on the command only after unlocking the queue mutex
+        gettimeofday(&stop_time, NULL);
         printf("the line we want to execute %s\n", line);
-        parse_worker_line(line);
+        parse_worker_line(line, stop_time, thread_id);
         busy_list[thread_id]=false;
         pthread_cond_signal(&dispatcher_wait);
     }
@@ -203,12 +207,14 @@ void increment_decrement_or_sleep(char *work, int integer)
     //fputs("valeria: check\n", *(file_array+integer));
 
 }
-void parse_worker_line(char *command)
+void parse_worker_line(char *command, struct timeval time, int thread_id)
 {
     char *line_ptr;
     char *remain=command;
     line_ptr = strtok_r(command, ";", &remain);
-    
+
+    long long elapsed = (time.tv_sec - start_time.tv_sec) * 1000000LL +time.tv_usec - time.tv_usec;
+    fprintf(thread_array[thread_id], "TIME %lld: START job %s\n" , elapsed, command); //for now time is 0sec
     while(line_ptr != NULL)
     {   
 
@@ -221,6 +227,7 @@ void parse_worker_line(char *command)
 }
 void execute_worker_command(char command[MAX_LINE_LENGTH]) 
 {
+    
     while(command[0] == 32) //whitespace in ascii, removes whitespaces at start of sentence 
     {
         //printf("entered loop %s\n", command);
@@ -235,6 +242,7 @@ void execute_worker_command(char command[MAX_LINE_LENGTH])
     //printf("check:%s and the length is %ld\n", command, strlen(command));
     if (!strcmp(command, "msleep"))
     {
+
         printf("thread slept for %s msec\n", num);
         sleep(atoi(num)/1000); 
     }
@@ -329,7 +337,8 @@ void dispatcher_work(FILE *commands_file)
 
 int main(int argc, char **argv)
 {
-    FILE *read_file; 
+    gettimeofday(&start_time, NULL);
+    FILE *read_file;
     if (pthread_mutex_init(&mutex, NULL) != 0) {
         printf("\n mutex init has failed\n");
         return 1;}
