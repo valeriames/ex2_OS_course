@@ -27,10 +27,12 @@ struct job_node // I implemented the job queue as connected list
 } job_node;
 
 struct job_node * head;
-pthread_mutex_t mutex;
+pthread_mutex_t mutex; //this is the mutex for the job queue
+pthread_mutex_t file_mutexes[MAX_NUM_COUNTER]; //these are mutexes for the file
 pthread_cond_t available_job=PTHREAD_COND_INITIALIZER;
-pthread_cond_t empty_job_queue=PTHREAD_COND_INITIALIZER;
+pthread_cond_t dispatcher_wait=PTHREAD_COND_INITIALIZER;
 FILE **file_array;
+bool busy_list[MAX_NUM_THREADS]={false}; // this array tells us if a thread is working
 
 FILE* *create_num_counters_file(int num_counters) //part of dispatcher initiallization //need to change num_counters to long long? 
 //created num counter file with "0" inside
@@ -40,17 +42,11 @@ FILE* *create_num_counters_file(int num_counters) //part of dispatcher initialli
     for (int i=0; i<num_counters; i++)
     {
         if (i < 10)
-        {
             snprintf(filename, 12, "count0%d.txt", i);
-            printf("counter file that was made: %s\n", filename);
-        }
         else 
-        {
             snprintf(filename, 12, "count%d.txt", i);
-            printf("counter file that was made: %s\n", filename);
-        }
 
-        cntr_file_array[i] = fopen(filename, "w");
+        cntr_file_array[i] = fopen(filename, "w+");
         if (cntr_file_array[i] == NULL)
         {
             printf("Failed creating counter file\n"); 
@@ -58,6 +54,7 @@ FILE* *create_num_counters_file(int num_counters) //part of dispatcher initialli
         }
 
         fputs("0\0", cntr_file_array[i]);
+        rewind(cntr_file_array[i]);
         //char check[MAX_LINE_LENGTH];
         //fgets(check, MAX_LINE_LENGTH, cntr_file_array[i]);
         //printf("CHECKING FILE:%s\n\n\n", check);
@@ -99,12 +96,19 @@ void * thread_func(void *arg) //need to go through it, Gadis implemintation as p
             printf("lock failed\n");    
         
         while (head == NULL) pthread_cond_wait(&available_job, &mutex);
+        busy_list[thread_id]=true; //this thread is busy
         struct job_node *last = head;
         last=delete_and_free_last(head); //now last is the last node in the queue - the job we take
         
-        printf("thread %d woke up and took: %s\n", thread_id, last->job_text);
-        parse_worker_line(last->job_text);
         
+        char *line=malloc(MAX_LINE_LENGTH*sizeof(char));
+        strcpy(line, last->job_text);
+        //printf("thread %d woke up and took: %s\n", thread_id, line);
+        // printf("the line we want to execute %s\n", last->job_text);
+        // parse_worker_line(last->job_text);
+        printf("the line we want to execute %s\n", line);
+        parse_worker_line(line);
+        free(line);
         free(last);
         if (head==last)
             head=NULL;
@@ -112,7 +116,11 @@ void * thread_func(void *arg) //need to go through it, Gadis implemintation as p
         //printf("this is %d\n", thread_id);
         if (pthread_mutex_unlock(&mutex))
             printf("unlock failed %d\n", thread_id);
-
+        
+        //we start working on the command only after unlocking the queue mutex
+        
+        busy_list[thread_id]=false;
+        pthread_cond_signal(&dispatcher_wait);
     }
 }
 
@@ -152,24 +160,34 @@ char* parse_line(char *line, char *word, char *pattern)
     return line;
 }
 
-void increment_or_decrement(char *work, int integer)
+void increment_decrement_or_sleep(char *work, int integer)
 {
     char num[MAX_LINE_LENGTH]; 
 
     if (integer>num_of_files-1)
     {
         printf("integer of worker command %s is %d and is bigger than number of count files %d\n", work, integer, num_of_files);
-        //while(fgets(num, MAX_LINE_LENGTH, file_array[integer]))
-        //{
-        //    printf("NUM IS:%s\n\n\n", num);
-        //}
     }
-
     else
     {
-        printf("checking that can access file num %d\n", integer);
-
-        
+        pthread_mutex_lock(&file_mutexes[integer]);
+        rewind(file_array[integer]);
+        fgets(num, MAX_LINE_LENGTH, file_array[integer]);
+        //printf("counter value read is %s\n", num);
+        long long int counter=strtol(num, NULL, 10);
+        if (!strcmp(work, "increment"))
+            {
+                rewind(file_array[integer]);
+                fprintf(file_array[integer], "%lld", counter+1);
+                printf("counter in file %d changed from %s to %lld\n",integer, num, counter+1);
+            }
+        if (!strcmp(work, "decrement"))
+            {
+                rewind(file_array[integer]);
+                fprintf(file_array[integer], "%lld", counter-1);
+                printf("counter in file %d changed from %s to %lld\n", integer, num, counter-1);
+            }
+        pthread_mutex_unlock(&file_mutexes[integer]);
     }
     //fputs("valeria: check\n", *(file_array+integer));
 
@@ -181,10 +199,10 @@ void parse_worker_line(char *command)
     
     while(line_ptr != NULL)
     {   
-        printf("next command is %s\n", line_ptr);
+
+        //printf("next command is %s\n", line_ptr);
         execute_worker_command(line_ptr);
         line_ptr = strtok(NULL, ";");
-        
     }
 
     
@@ -203,17 +221,22 @@ void execute_worker_command(char command[MAX_LINE_LENGTH])
     char *integers="1234567890";
     char *num = strpbrk(command, integers);
     //printf("check:%s and the length is %ld\n", command, strlen(command));
+    if (!strcmp(command, "msleep"))
+    {
+        printf("thread slept for %s msec\n", num);
+        sleep(atoi(num)/1000); 
+    }
     if (strstr(command, "increment"))
     {
         //DO STUFF
-        printf("work is: %s, integer is: %s\n", "increment", num);
+        //printf("work is: %s, integer is: %s\n", "increment", num);
         char num_file[MAX_LINE_LENGTH];
-        increment_or_decrement("increment", atoi(num));
+        increment_decrement_or_sleep("increment", atoi(num));
     }
     else if (strstr(command, "decrement"))
     {
-        printf("work is: %s, integer is: %s\n", "decrement", num);
-        increment_or_decrement("decrement", atoi(num));
+        //printf("work is: %s, integer is: %s\n", "decrement", num);
+        increment_decrement_or_sleep("decrement", atoi(num));
     }
 
     // else if (strstr(comm_string, "repeat"))
@@ -225,19 +248,18 @@ void execute_worker_command(char command[MAX_LINE_LENGTH])
     // // free(comm_string);
 }
 
-void dispatcher_work(FILE *commands_file)
+bool check_busy()
 {
-    char line[MAX_LINE_LENGTH];
-    char word[MAX_LINE_LENGTH]; //this will be a list of words in the specific line
-    int line_counter=0;
+    for (int i=0; i<MAX_NUM_THREADS; i++)
+            if (busy_list[i])
+                    return true;
+    return false;
+}
+
+void dispatcher_execute(char *word, char*line)
+{
     struct job_node* ptr =NULL;
-    while(fgets(line, MAX_LINE_LENGTH, commands_file))
-    {
-        strcpy(line,parse_line(line, word, " "));
-        line_counter+=1;
-        //printf("word is:%s, line is:%s\n", word,line);
- 
-        if (!strcmp(word, "dispatcher_msleep")) //i think that it should appear with format such as: "worker msleep 5; increment 3;" 
+    if (!strcmp(word, "dispatcher_msleep")) //i think that it should appear with format such as: "worker msleep 5; increment 3;" 
                                                 //so the comparison should probably inside "if" condition on "worker"
                                                 //according to: moodle.tau.ac.il/mod/forum/discuss.php?d=20668
         {
@@ -245,42 +267,55 @@ void dispatcher_work(FILE *commands_file)
             sleep(atoi(line)/1000); 
         }
 
-        if (!strcmp(word, "dispatcher_wait")) //same note as privous on msleep
-            {
-                printf("not supported yet");
-            }
+    if (!strcmp(word, "dispatcher_wait")) //same note as privous on msleep
+        {
+            bool flag = false;
+            pthread_mutex_lock(&mutex);
+            while (head != NULL || check_busy()) pthread_cond_wait(&dispatcher_wait, &mutex);
+            pthread_mutex_unlock(&mutex);
+        }
 
-        else if (!strcmp(word, "worker"))
-            {
-                pthread_mutex_lock(&mutex);
+    else if (!strcmp(word, "worker"))
+        {
+            pthread_mutex_lock(&mutex);
 
-                ptr = (struct job_node*)malloc(sizeof(job_node));
-                strcpy(ptr->job_text,line);
-                if (head==NULL)
-                    {
-                        ptr->next=NULL;
-                    }
-                else
-                    {
-                        ptr->next=head;
-                    }
-                head = ptr;
-                
-                pthread_mutex_unlock(&mutex);
-                pthread_cond_signal(&available_job);
-            }
-        else
-            printf("this line is not recognized: %s\n", word);
+            ptr = (struct job_node*)malloc(sizeof(job_node));
+            strcpy(ptr->job_text,line);
+            if (head==NULL)
+                {
+                    ptr->next=NULL;
+                }
+            else
+                {
+                    ptr->next=head;
+                }
+            head = ptr;
+            
+            pthread_mutex_unlock(&mutex);
+            pthread_cond_signal(&available_job);
+        }
+    else
+        printf("this line is not recognized: %s\n", word);
+}
+
+void dispatcher_work(FILE *commands_file)
+{
+    char line[MAX_LINE_LENGTH];
+    char word[MAX_LINE_LENGTH]; //this will be a list of words in the specific line
+    int line_counter=0;
+    while(fgets(line, MAX_LINE_LENGTH, commands_file))
+    {
+        strcpy(line,parse_line(line, word, " "));
+        line_counter+=1;
+        //printf("word is:%s, line is:%s\n", word,line); 
+        dispatcher_execute(word, line);
     }
-    // printf("\n\nList elements are - \n");
-    // struct job_node* temp=head;
-    // while(temp != NULL) {
-    //     printf("%s --->",temp->job_text);
-    //     temp = temp->next;}
-    
-    sleep(5);
-    // I want to wait for all workers to finish here, how do we implement that?
+    //cmd file ended
+    //we implement the waiting at end of file using the the dispatcher wait
+    dispatcher_execute("dispatcher_wait", NULL);
+    sleep(1);
     fclose(commands_file);
+    printf("\n\nwe finished running !!!!\n\n");
 }
 
 int main(int argc, char **argv)
@@ -289,6 +324,12 @@ int main(int argc, char **argv)
     if (pthread_mutex_init(&mutex, NULL) != 0) {
         printf("\n mutex init has failed\n");
         return 1;}
+    for (int i=0; i<MAX_NUM_COUNTER; i++)
+    {
+    if (pthread_mutex_init(&file_mutexes[i], NULL) != 0) {
+        printf("\n file mutex %d init has failed\n", i);
+        return 1;}   
+    }
     read_file = fopen(argv[1], "r"); 
     if (read_file == NULL)
     {
