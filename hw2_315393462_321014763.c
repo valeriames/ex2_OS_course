@@ -42,7 +42,7 @@ FILE* *create_counter_files(int counter, int flag) //part of dispatcher initiall
     char file_type[8]; 
     if (flag == 0) strcpy(file_type, "count"); 
     else if (flag ==1) strcpy(file_type, "thread");
-
+ 
     for (int i=0; i<counter; i++)
     {
         if (i < 10)
