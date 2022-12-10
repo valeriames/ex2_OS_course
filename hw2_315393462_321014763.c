@@ -31,13 +31,13 @@ pthread_mutex_t mutex; //this is the mutex for the job queue
 pthread_mutex_t file_mutexes[MAX_NUM_COUNTER]; //these are mutexes for the file
 pthread_cond_t available_job=PTHREAD_COND_INITIALIZER;
 pthread_cond_t dispatcher_wait=PTHREAD_COND_INITIALIZER;
-FILE **file_array;
+FILE **file_array, **thread_array, *dispatcher_file;
 bool busy_list[MAX_NUM_THREADS]={false}; // this array tells us if a thread is working
 
 FILE* *create_counter_files(int counter, int flag) //part of dispatcher initiallization //need to change counter to long long?  //flag: 0 for counter file, 1 for thread file
 //created num counter file with "0" inside
 {
-    static FILE *file_array[MAX_NUM_COUNTER];
+    static FILE *file_txt_array[MAX_NUM_COUNTER];
     char filename[12];
     char file_type[8]; 
     if (flag == 0) strcpy(file_type, "count"); 
@@ -50,21 +50,33 @@ FILE* *create_counter_files(int counter, int flag) //part of dispatcher initiall
         else 
             snprintf(filename, 24, "%s%d.txt",file_type, i);
 
-        file_array[i] = fopen(filename, "w+");
-        if (file_array[i] == NULL)
+        file_txt_array[i] = fopen(filename, "w+");
+        if (file_txt_array[i] == NULL)
         {
             printf("Failed creating counter file\n"); 
             exit(1);
         }
 
-        fputs("0\0", file_array[i]);
-        rewind(file_array[i]);
+        fputs("0\0", file_txt_array[i]);
+        rewind(file_txt_array[i]);
         //char check[MAX_LINE_LENGTH];
         //fgets(check, MAX_LINE_LENGTH, file_array[i]);
         //printf("CHECKING FILE:%s\n\n\n", check);
     }
     
-    return file_array;
+    return file_txt_array;
+}
+
+FILE* create_dispatcher_file()
+{
+    FILE *dispatcher_file; 
+    dispatcher_file = fopen("dispatcher.txt", "w+");
+    if (dispatcher_file == NULL)
+    {
+        printf("Failed creating counter file\n"); 
+        exit(1);
+    }
+    return dispatcher_file;
 }
 
 struct job_node* delete_and_free_last(struct job_node *head)
@@ -141,7 +153,8 @@ void initialize_dispatcher(int num_of_threads, int num_of_files)
         
         //pthread_join(tid, NULL);
         }
-    create_counter_files(num_of_threads, flag);
+    thread_array = create_counter_files(num_of_threads, flag);
+    dispatcher_file = create_dispatcher_file();
 }
 char* parse_line(char *line, char *word, char *pattern)
 {
