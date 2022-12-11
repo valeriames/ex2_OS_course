@@ -59,8 +59,10 @@ FILE* *create_counter_files(int counter, int flag) //part of dispatcher initiall
             exit(1);
         }
 
+        
         fputs("0\0", file_txt_array[i]);
         rewind(file_txt_array[i]);
+
         //char check[MAX_LINE_LENGTH];
         //fgets(check, MAX_LINE_LENGTH, file_array[i]);
         //printf("CHECKING FILE:%s\n\n\n", check);
@@ -193,13 +195,13 @@ void increment_decrement_or_sleep(char *work, int integer)
         if (!strcmp(work, "increment"))
             {
                 rewind(file_array[integer]);
-                fprintf(file_array[integer], "%lld", counter+1);
+                fprintf(file_array[integer], "%lld\n", counter+1);
                 printf("counter in file %d changed from %s to %lld\n",integer, num, counter+1);
             }
         if (!strcmp(work, "decrement"))
             {
                 rewind(file_array[integer]);
-                fprintf(file_array[integer], "%lld", counter-1);
+                fprintf(file_array[integer], "%lld\n", counter-1);
                 printf("counter in file %d changed from %s to %lld\n", integer, num, counter-1);
             }
         pthread_mutex_unlock(&file_mutexes[integer]);
@@ -214,7 +216,7 @@ void parse_worker_line(char *command, struct timeval time, int thread_id)
     line_ptr = strtok_r(command, ";", &remain);
 
     long long elapsed = (time.tv_sec - start_time.tv_sec) * 1000000LL +time.tv_usec - time.tv_usec;
-    fprintf(thread_array[thread_id], "TIME %lld: START job %s\n" , elapsed, command); //for now time is 0sec
+    //fprintf(thread_array[thread_id], "TIME %lld: START job %s\n" , elapsed, command); //for now time is 0sec
     while(line_ptr != NULL)
     {   
 
@@ -240,7 +242,7 @@ void execute_worker_command(char command[MAX_LINE_LENGTH])
     char *integers="1234567890";
     char *num = strpbrk(command, integers);
     //printf("check:%s and the length is %ld\n", command, strlen(command));
-    if (!strcmp(command, "msleep"))
+    if (strstr(command, "msleep"))
     {
 
         printf("thread slept for %s msec\n", num);
@@ -315,6 +317,24 @@ void dispatcher_execute(char *word, char*line)
         printf("this line is not recognized: %s\n", word);
 }
 
+void print_results()
+{
+    char *str;
+    for (int i=0; i<num_of_files; i++)
+    {
+        rewind(file_array[i]);
+        printf("for file number %d the counter value is %s\n", i, fgets(str, 10, file_array[i]));
+    }
+}
+
+void close_files()
+{
+    for (int i=0;i<num_of_files; i++)
+    {
+        fclose(file_array[i]);
+    }
+}
+
 void dispatcher_work(FILE *commands_file)
 {
     char line[MAX_LINE_LENGTH];
@@ -330,9 +350,12 @@ void dispatcher_work(FILE *commands_file)
     //cmd file ended
     //we implement the waiting at end of file using the the dispatcher wait
     dispatcher_execute("dispatcher_wait", NULL);
-    sleep(5);
+    //sleep(5);
     fclose(commands_file);
+    
     printf("\n\nwe finished running !!!!\n\n");
+    close_files();
+    //print_results();
 }
 
 int main(int argc, char **argv)
