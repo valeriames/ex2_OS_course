@@ -1,12 +1,3 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <pthread.h>
-#include <math.h>
-#include <stdbool.h>
-#include <unistd.h>
-#include <sys/time.h>
-#include <limits.h>
 
 #include "hw2_315393462_321014763.h"
 

@@ -204,9 +204,10 @@ void * thread_func(void *arg)  //gets thread to run job from instruction file
         if (log_handler == 1) //if log =1 it saves all timing data of when thread was done 
         {
             thread_end = print_to_thread_file(thread_id, saved_line, "END");
-            thread_end_counter[thread_j] = thread_end; 
+            
             //printf("\n\n thread_end : %lld, index: %d, lines: %d\n\n", thread_end, thread_j , line_counter);
         }
+        thread_end_counter[thread_j] = thread_end; 
         thread_j++;
 
         pthread_cond_signal(&dispatcher_wait);
@@ -232,6 +233,8 @@ void initialize_dispatcher()
     
     if (log_handler == 1) dispatcher_file = create_dispatcher_file();
 }
+
+
 char* parse_line(char *line, char *word, char *pattern)
 {
     for (int i=0; i<1; i++)
@@ -250,6 +253,7 @@ char* parse_line(char *line, char *word, char *pattern)
 void increment_decrement_or_sleep(char *work, int integer) //implemintation of worker commands 
 {
     char num[MAX_LINE_LENGTH]; 
+    char *line_command; 
 
     if (integer>num_of_files-1)
     {
@@ -268,12 +272,13 @@ void increment_decrement_or_sleep(char *work, int integer) //implemintation of w
                 fprintf(file_array[integer], "%lld\n", counter+1);
                 printf("counter in file %d changed from %s to %lld\n",integer, num, counter+1);
             }
-        if (!strcmp(work, "decrement"))
+        else if (!strcmp(work, "decrement"))
             {
                 rewind(file_array[integer]);
                 fprintf(file_array[integer], "%lld\n", counter-1);
                 printf("counter in file %d changed from %s to %lld\n", integer, num, counter-1);
             }
+
         pthread_mutex_unlock(&file_mutexes[integer]);
     }
 }
@@ -304,6 +309,8 @@ void parse_worker_line(char *command, int thread_id) //parsing between different
 }
 void execute_worker_command(char command[MAX_LINE_LENGTH]) 
 {
+    char *remain=command;
+    char line_command_ptr; 
     
     while(command[0] == 32) //whitespace in ascii, removes whitespaces at start of sentence 
     {
@@ -335,6 +342,11 @@ void execute_worker_command(char command[MAX_LINE_LENGTH])
         //printf("work is: %s, integer is: %s\n", "decrement", num);
         increment_decrement_or_sleep("decrement", atoi(num));
     }
+    //else if (strstr(command, "repeat"))
+    //{
+        //line_command_ptr = strtok_r(command, ";", &remain);
+        //for (int j=0; j<num; j++) execute_worker_command(line_command_ptr); 
+    //}
 
 }
 
@@ -360,7 +372,7 @@ void dispatcher_execute(char *word, char *line)
             sleep(atoi(line)/1000); 
         }
 
-    if (!strcmp(word, "dispatcher_wait"))
+    else if (!strcmp(word, "dispatcher_wait"))
         {
             bool flag = false;
             pthread_mutex_lock(&mutex);
@@ -413,7 +425,6 @@ void dispatcher_work(FILE *commands_file)
 {
     char line[MAX_LINE_LENGTH];
     char word[MAX_LINE_LENGTH]; //this will be a list of words in the specific line
-    
     line_counter=0;
 
     long long sum_jobs_turnaround=0, min_job = LLONG_MAX, max_job = LLONG_MIN, average_job=0; 
@@ -421,11 +432,20 @@ void dispatcher_work(FILE *commands_file)
 
     while(fgets(line, MAX_LINE_LENGTH, commands_file))
     {
+        //printf("line counter is:%d\n\n", line_counter);
+        
         strcpy(line,parse_line(line, word, " "));
-        line_counter+=1;
+        
+        
         dispatcher_execute(word, line);
-        dispatcher_count = realloc(dispatcher_count, sizeof(long long)* line_counter);
-        dispatcher_count[line_counter-1] = dispatcher_start;
+        
+        if (strstr(word, "dispatcher") == NULL)
+        {
+            line_counter+=1;
+            dispatcher_count = realloc(dispatcher_count, sizeof(long long)* line_counter);
+            dispatcher_count[line_counter-1] = dispatcher_start;
+        }
+        
 
     }
     //cmd file ended
@@ -434,10 +454,11 @@ void dispatcher_work(FILE *commands_file)
     
     fclose(commands_file);
     
-    printf("\n\nwe finished running !!!!\n\n now creating stats.txt\n\n");
+    //printf("\n\nwe finished running !!!!\n\n now creating stats.txt\n\n");
 
     for (int j = 0; j<line_counter; j++)
     {
+        //printf("checking values: dispatcher %lld, thread: %lld\n\n\n\n", dispatcher_count[j], thread_end_counter[j]);
         long long value = thread_end_counter[j] - dispatcher_count[j]; 
         sum_jobs_turnaround += value;
         if (value < min_job) min_job = value;
