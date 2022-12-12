@@ -8,4 +8,5 @@ make clean:
 	\rm -f count*.txt
 	\rm -f thread*.txt
 	\rm -f dispatcher.txt
+	\rm =f stats.txt
 
