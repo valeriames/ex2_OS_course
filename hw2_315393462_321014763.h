@@ -377,20 +377,22 @@ void dispatcher_execute(char *word, char *line)
         dispatcher_start = print_to_dispatcher_file(line);
     }
 
-    if (!strcmp(word, "dispatcher_msleep"))
+    if (strstr(word, "dispatcher_msleep"))
         {
-            sleep(atoi(line)/1000); 
+            sleep(atoi(line)/1000);
         }
 
-    else if (!strcmp(word, "dispatcher_wait"))
+    else if (strstr(word, "dispatcher_wait"))
         {
+            
             bool flag = false;
             pthread_mutex_lock(&mutex);
-            while (head != NULL || check_busy()) pthread_cond_wait(&dispatcher_wait, &mutex);
+            
+            while (head != NULL || check_busy()){pthread_cond_wait(&dispatcher_wait, &mutex);}
             pthread_mutex_unlock(&mutex);
         }
 
-    else if (!strcmp(word, "worker"))
+    else if (strstr(word, "worker"))
         {
             pthread_mutex_lock(&mutex);
 
@@ -444,10 +446,14 @@ void dispatcher_work(FILE *commands_file)
     {
         //printf("line counter is:%d\n\n", line_counter);
         
-        strcpy(line,parse_line(line, word, " "));
+        if (strstr(line, "dispatcher_wait;"))
+            dispatcher_execute("dispatcher_wait;", NULL);
+        else
+            {
+            strcpy(line,parse_line(line, word, " "));
+            dispatcher_execute(word, line);
+            }
         
-        
-        dispatcher_execute(word, line);
         
         if (strstr(word, "dispatcher") == NULL)
         {
