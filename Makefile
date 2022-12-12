@@ -6,4 +6,6 @@ hw2_exc: hw2_315393462_321014763.c
 make clean:
 	\rm -f hw2
 	\rm -f count*.txt
+	\rm -f thread*.txt
+	\rm -f dispatcher.txt
 

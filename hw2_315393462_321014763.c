@@ -12,7 +12,7 @@
 #define MAX_LINE_LENGTH 1024
 
 int num_of_files;
-void parse_worker_line(char *command, struct timeval time, int thread_id);
+void parse_worker_line(char *command, int thread_id);
 void execute_worker_command(char command[MAX_LINE_LENGTH]) ;
 struct thread_data_s  //this is the data the thread gets when it is made
 {
@@ -34,23 +34,21 @@ pthread_cond_t available_job=PTHREAD_COND_INITIALIZER;
 pthread_cond_t dispatcher_wait=PTHREAD_COND_INITIALIZER;
 FILE **file_array, **thread_array, *dispatcher_file;
 bool busy_list[MAX_NUM_THREADS]={false}; // this array tells us if a thread is working
-struct timeval start_time;
+time_t start_time, end_time;
+int log_handler; 
 
-FILE* *create_counter_files(int counter, int flag) //part of dispatcher initiallization //need to change counter to long long?  //flag: 0 for counter file, 1 for thread file
+FILE* *create_num_counter_file(int counter) //part of dispatcher initiallization //need to change counter to long long?  //flag: 0 for counter file, 1 for thread file
 //created num counter file with "0" inside
 {
     static FILE *file_txt_array[MAX_NUM_COUNTER];
     char filename[12];
-    char file_type[8]; 
-    if (flag == 0) strcpy(file_type, "count"); 
-    else if (flag ==1) strcpy(file_type, "thread");
  
     for (int i=0; i<counter; i++)
     {
         if (i < 10)
-            snprintf(filename, 24, "%s0%d.txt",file_type, i);
+            snprintf(filename, 24, "count0%d.txt", i);
         else 
-            snprintf(filename, 24, "%s%d.txt",file_type, i);
+            snprintf(filename, 24, "count%d.txt", i);
 
         file_txt_array[i] = fopen(filename, "w+");
         if (file_txt_array[i] == NULL)
@@ -71,6 +69,31 @@ FILE* *create_counter_files(int counter, int flag) //part of dispatcher initiall
     return file_txt_array;
 }
 
+FILE **create_thread_files(int num)
+{
+    static FILE *file_txt_array[MAX_NUM_COUNTER];
+    char filename[12];
+
+    if (num < 10)
+            snprintf(filename, 24, "thread0%d.txt", num);
+        else 
+            snprintf(filename, 24, "thread%d.txt", num);
+
+        file_txt_array[num] = fopen(filename, "w+");
+        if (file_txt_array[num] == NULL)
+        {
+            printf("Failed creating counter file\n"); 
+            exit(1);
+        }
+
+        
+    fputs("0\0", file_txt_array[num]);
+    rewind(file_txt_array[num]);
+
+    return file_txt_array;
+
+}
+
 FILE* create_dispatcher_file()
 {
     FILE *dispatcher_file; 
@@ -81,6 +104,18 @@ FILE* create_dispatcher_file()
         exit(1);
     }
     return dispatcher_file;
+}
+
+void print_to_thread_file(int thread_id, long long time, char* command, char* start_or_end)
+{
+    fprintf(thread_array[thread_id], "TIME %lld: %s job %s\n" , time, start_or_end, command); //for now time is 0sec
+}
+
+void print_to_dispatcher_file (char* line )
+{
+    time(&end_time);
+    long long diff =(long long)difftime(end_time, 0);
+    fprintf(dispatcher_file, "TIME %lld: read cmd line: %s\n", diff/1000, line);
 }
 
 struct job_node* delete_and_free_last(struct job_node *head)
@@ -101,7 +136,6 @@ struct job_node* delete_and_free_last(struct job_node *head)
 void * thread_func(void *arg) //need to go through it, Gadis implemintation as part of creating new thread, gets an error 
 {
     struct thread_data_s* td = (struct thread_data_s *)arg;
-    struct timeval stop_time; 
     int i=0, thread_id, *answer;
     thread_id = td->thread_id;
    
@@ -132,10 +166,14 @@ void * thread_func(void *arg) //need to go through it, Gadis implemintation as p
             printf("unlock failed %d\n", thread_id);
         
         //we start working on the command only after unlocking the queue mutex
-        gettimeofday(&stop_time, NULL);
+        time(&end_time);
         printf("the line we want to execute %s\n", line);
-        parse_worker_line(line, stop_time, thread_id);
+        parse_worker_line(line, thread_id);
         busy_list[thread_id]=false;
+        time(&end_time);
+        long long elapsed = (long long)difftime(end_time, start_time)/1000;
+        if (log_handler == 1) print_to_thread_file(thread_id, elapsed, line, "END");
+
         pthread_cond_signal(&dispatcher_wait);
     }
 }
@@ -144,23 +182,19 @@ void initialize_dispatcher(int num_of_threads, int num_of_files)
 {
     pthread_t tid; 
     pthread_attr_t attr; 
-    struct thread_data_s thread_data;
-    int flag = 1; //for create_counter_files to handle it as thread files
-    //FILE *file_array[MAX_NUM_COUNTER];
-
-
+    struct thread_data_s thread_data;   
     //pthread_mutex_lock(&mutex);
     for (int i=0; i<num_of_threads; i++)
-        {
+    {
         thread_data.thread_id =i;
         pthread_create(&tid, NULL, thread_func, (void *) &thread_data); //error in this thread_func, therefore commented out for now 
-        
+        if (log_handler == 1) thread_array = create_thread_files(i);
         //printf("we created thread number %d!! :)\n", i);
         
         //pthread_join(tid, NULL);
-        }
-    thread_array = create_counter_files(num_of_threads, flag);
-    dispatcher_file = create_dispatcher_file();
+    }
+    
+    if (log_handler == 1) dispatcher_file = create_dispatcher_file();
 }
 char* parse_line(char *line, char *word, char *pattern)
 {
@@ -209,14 +243,19 @@ void increment_decrement_or_sleep(char *work, int integer)
     //fputs("valeria: check\n", *(file_array+integer));
 
 }
-void parse_worker_line(char *command, struct timeval time, int thread_id)
+
+
+
+void parse_worker_line(char *command, int thread_id)
 {
     char *line_ptr;
+
+    long long elapsed = (long long)difftime(end_time, start_time)/1000;
+    if (log_handler == 1) print_to_thread_file(thread_id, elapsed, command, "START"); 
+
     char *remain=command;
     line_ptr = strtok_r(command, ";", &remain);
-
-    long long elapsed = (time.tv_sec - start_time.tv_sec) * 1000000LL +time.tv_usec - time.tv_usec;
-    //fprintf(thread_array[thread_id], "TIME %lld: START job %s\n" , elapsed, command); //for now time is 0sec
+    
     while(line_ptr != NULL)
     {   
 
@@ -261,13 +300,6 @@ void execute_worker_command(char command[MAX_LINE_LENGTH])
         increment_decrement_or_sleep("decrement", atoi(num));
     }
 
-    // else if (strstr(comm_string, "repeat"))
-    // {
-    //     //printf("entered repeat: comm is:%s\n\n", command);
-    //     //DO STUFF
-    // }
-
-    // // free(comm_string);
 }
 
 bool check_busy()
@@ -278,9 +310,10 @@ bool check_busy()
     return false;
 }
 
-void dispatcher_execute(char *word, char*line)
+void dispatcher_execute(char *word, char *line)
 {
     struct job_node* ptr =NULL;
+    if (log_handler ==1) print_to_dispatcher_file(line);
     if (!strcmp(word, "dispatcher_msleep"))
         {
             sleep(atoi(line)/1000); 
@@ -360,7 +393,7 @@ void dispatcher_work(FILE *commands_file)
 
 int main(int argc, char **argv)
 {
-    gettimeofday(&start_time, NULL);
+    time(&start_time);
     FILE *read_file;
     if (pthread_mutex_init(&mutex, NULL) != 0) {
         printf("\n mutex init has failed\n");
@@ -385,9 +418,9 @@ int main(int argc, char **argv)
     }
     int num_of_threads = atoi(argv[2]); //num threads that are created according to command
     num_of_files = atoi(argv[3]);
+    log_handler = atoi(argv[4]);
     //int *result;
-    int flag = 0; //for create_counter_files to handle it for counter files 
-    file_array=create_counter_files(num_of_files, flag);
+    file_array=create_num_counter_file(num_of_files);
     initialize_dispatcher(num_of_threads, num_of_files); //creates required number of threads
     dispatcher_work(read_file);
 
