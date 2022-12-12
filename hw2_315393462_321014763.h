@@ -196,7 +196,7 @@ void * thread_func(void *arg)  //gets thread to run job from instruction file
             printf("unlock failed %d\n", thread_id);
         
         //we start working on the command only after unlocking the queue mutex
-        printf("the line we want to execute %s\n", line);
+        //printf("the line we want to execute %s\n", line);
         
         parse_worker_line(line, thread_id);
         busy_list[thread_id]=false;
@@ -275,13 +275,13 @@ void increment_decrement_or_sleep(char *work, int integer) //implemintation of w
             {
                 rewind(file_array[integer]);
                 fprintf(file_array[integer], "%lld\n", counter+1);
-                printf("counter in file %d changed from %s to %lld\n",integer, num, counter+1);
+                //printf("counter in file %d changed from %s to %lld\n",integer, num, counter+1);
             }
         else if (!strcmp(work, "decrement"))
             {
                 rewind(file_array[integer]);
                 fprintf(file_array[integer], "%lld\n", counter-1);
-                printf("counter in file %d changed from %s to %lld\n", integer, num, counter-1);
+                //printf("counter in file %d changed from %s to %lld\n", integer, num, counter-1);
             }
 
         pthread_mutex_unlock(&file_mutexes[integer]);
@@ -304,10 +304,19 @@ void parse_worker_line(char *command, int thread_id) //parsing between different
     
     while(line_ptr != NULL)
     {   
-
+        if (strstr(line_ptr, "repeat"))
+        {
+            char *integers="1234567890";
+            char *num = strpbrk(line_ptr, integers);
+            for (int i=0; i<atoi(num)-1; i++) //we are already in the first execution so need to iterate -1 times.
+            {
+                parse_worker_line(remain, thread_id);
+            }
+        }
         //printf("next command is %s\n", line_ptr);
         execute_worker_command(line_ptr);
         line_ptr = strtok_r(NULL, ";", &remain);
+        
     }
 
     
@@ -329,6 +338,7 @@ void execute_worker_command(char command[MAX_LINE_LENGTH])
     char *integers="1234567890";
     char *num = strpbrk(command, integers);
     //printf("check:%s and the length is %ld\n", command, strlen(command));
+    
     if (strstr(command, "msleep"))
     {
 
@@ -478,11 +488,11 @@ void dispatcher_work(FILE *commands_file)
     average_job = sum_jobs_turnaround/((long long)line_counter);
 
     create_stats_file(sum_jobs_turnaround, min_job, average_job, max_job);
-
+    print_results();
     close_files(num_of_files, file_array);
     //close_files(num_of_threads, thread_array); //segmentation fault
     //fclose(dispatcher_file); //segmentation fault
     free(dispatcher_count);
     free(thread_end_counter);
-    //print_results();
+    
 }
