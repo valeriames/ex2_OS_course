@@ -207,6 +207,11 @@ void * thread_func(void *arg)  //gets thread to run job from instruction file
             
             //printf("\n\n thread_end : %lld, index: %d, lines: %d\n\n", thread_end, thread_j , line_counter);
         }
+        else 
+        {
+            gettimeofday(&end_time, 0);
+            thread_end  = (end_time.tv_sec - start_time.tv_sec)*1000LL + (end_time.tv_usec - start_time.tv_usec);
+        }
         thread_end_counter[thread_j] = thread_end; 
         thread_j++;
 
@@ -288,7 +293,7 @@ void increment_decrement_or_sleep(char *work, int integer) //implemintation of w
 void parse_worker_line(char *command, int thread_id) //parsing between different command in a single line 
 {
     char *line_ptr;
-    //long long elapsed = (long long)difftime(end_time, start_time)/1000;
+    
     if (log_handler == 1) //if log = 1 writes into thread when job started 
     {
         thread_start = print_to_thread_file(thread_id, command, "START"); 
@@ -366,6 +371,11 @@ void dispatcher_execute(char *word, char *line)
     {
         dispatcher_start = print_to_dispatcher_file(line);
     }
+    else
+    {
+        gettimeofday(&dispatcher_start_time, 0);
+        dispatcher_start = (dispatcher_start_time.tv_sec - start_time.tv_sec)*1000LL + (dispatcher_start_time.tv_usec - start_time.tv_usec);
+    }
 
     if (!strcmp(word, "dispatcher_msleep"))
         {
@@ -428,7 +438,7 @@ void dispatcher_work(FILE *commands_file)
     line_counter=0;
 
     long long sum_jobs_turnaround=0, min_job = LLONG_MAX, max_job = LLONG_MIN, average_job=0; 
-    long long * dispatcher_count = malloc(sizeof(long long)); //documentation of how much time passed since start of running untill the time we called the dispatcher again 
+    long long *dispatcher_count = malloc(sizeof(long long)); //documentation of how much time passed since start of running untill the time we called the dispatcher again 
 
     while(fgets(line, MAX_LINE_LENGTH, commands_file))
     {
@@ -454,7 +464,7 @@ void dispatcher_work(FILE *commands_file)
     
     fclose(commands_file);
     
-    //printf("\n\nwe finished running !!!!\n\n now creating stats.txt\n\n");
+    printf("\n\nwe finished running !!!!\n\n now creating stats.txt\n\n");
 
     for (int j = 0; j<line_counter; j++)
     {
@@ -470,8 +480,8 @@ void dispatcher_work(FILE *commands_file)
     create_stats_file(sum_jobs_turnaround, min_job, average_job, max_job);
 
     close_files(num_of_files, file_array);
-    close_files(num_of_threads, thread_array);
-    fclose(dispatcher_file);
+    //close_files(num_of_threads, thread_array); //segmentation fault
+    //fclose(dispatcher_file); //segmentation fault
     free(dispatcher_count);
     free(thread_end_counter);
     //print_results();
