@@ -34,7 +34,7 @@ pthread_cond_t available_job=PTHREAD_COND_INITIALIZER;
 pthread_cond_t dispatcher_wait=PTHREAD_COND_INITIALIZER;
 FILE **file_array, **thread_array, *dispatcher_file;
 bool busy_list[MAX_NUM_THREADS]={false}; // this array tells us if a thread is working
-time_t start_time, end_time;
+struct timeval start_time, end_time;
 int log_handler; 
 
 FILE* *create_num_counter_file(int counter) //part of dispatcher initiallization //need to change counter to long long?  //flag: 0 for counter file, 1 for thread file
@@ -106,16 +106,18 @@ FILE* create_dispatcher_file()
     return dispatcher_file;
 }
 
-void print_to_thread_file(int thread_id, long long time, char* command, char* start_or_end)
+void print_to_thread_file(int thread_id, char* command, char* start_or_end)
 {
-    fprintf(thread_array[thread_id], "TIME %lld: %s job %s" , time, start_or_end, command); //for now time is 0sec
+    gettimeofday(&end_time, 0);
+    long long elapsed = (end_time.tv_sec - start_time.tv_sec)*1000LL + (end_time.tv_usec - start_time.tv_usec);
+    fprintf(thread_array[thread_id], "TIME %lld: %s job %s" , elapsed, start_or_end, command); //for now time is 0sec
 }
 
 void print_to_dispatcher_file (char* line )
 {
-    time(&end_time);
-    long long diff =(long long)difftime(end_time, 0);
-    if (line != NULL) fprintf(dispatcher_file, "TIME %lld: read cmd line: %s", diff/1000, line);
+    gettimeofday(&end_time, 0);
+    long long elapsed = (end_time.tv_sec - start_time.tv_sec)*1000LL + (end_time.tv_usec - start_time.tv_usec);
+    if (line != NULL) fprintf(dispatcher_file, "TIME %lld: read cmd line: %s", elapsed, line);
 }
 
 struct job_node* delete_and_free_last(struct job_node *head)
@@ -169,14 +171,12 @@ void * thread_func(void *arg) //need to go through it, Gadis implemintation as p
             printf("unlock failed %d\n", thread_id);
         
         //we start working on the command only after unlocking the queue mutex
-        time(&end_time);
         printf("the line we want to execute %s\n", line);
         
         parse_worker_line(line, thread_id);
         busy_list[thread_id]=false;
-        time(&end_time);
-        long long elapsed = (long long)difftime(end_time, start_time)/1000;
-        if (log_handler == 1) print_to_thread_file(thread_id, elapsed, saved_line, "END");
+        //long long elapsed = (long long)difftime(end_time, start_time)/1000;
+        if (log_handler == 1) print_to_thread_file(thread_id, saved_line, "END");
 
         pthread_cond_signal(&dispatcher_wait);
     }
@@ -254,8 +254,8 @@ void parse_worker_line(char *command, int thread_id)
 {
     char *line_ptr;
 
-    long long elapsed = (long long)difftime(end_time, start_time)/1000;
-    if (log_handler == 1) print_to_thread_file(thread_id, elapsed, command, "START"); 
+    //long long elapsed = (long long)difftime(end_time, start_time)/1000;
+    if (log_handler == 1) print_to_thread_file(thread_id, command, "START"); 
 
     char *remain=command;
     line_ptr = strtok_r(command, ";", &remain);
@@ -397,7 +397,14 @@ void dispatcher_work(FILE *commands_file)
 
 int main(int argc, char **argv)
 {
-    time(&start_time);
+    gettimeofday(&start_time, 0);
+
+    //sleep(5); 
+
+    //gettimeofday(&end_time, 0); 
+    //long long elapsed = (end_time.tv_sec - start_time.tv_sec)*1000LL + (end_time.tv_usec - start_time.tv_usec);
+    //printf("checking time: \n\n ###################### \n %lld \n ###################### \n ", elapsed);
+
     FILE *read_file;
     if (pthread_mutex_init(&mutex, NULL) != 0) {
         printf("\n mutex init has failed\n");
