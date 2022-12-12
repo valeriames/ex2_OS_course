@@ -108,14 +108,14 @@ FILE* create_dispatcher_file()
 
 void print_to_thread_file(int thread_id, long long time, char* command, char* start_or_end)
 {
-    fprintf(thread_array[thread_id], "TIME %lld: %s job %s\n" , time, start_or_end, command); //for now time is 0sec
+    fprintf(thread_array[thread_id], "TIME %lld: %s job %s" , time, start_or_end, command); //for now time is 0sec
 }
 
 void print_to_dispatcher_file (char* line )
 {
     time(&end_time);
     long long diff =(long long)difftime(end_time, 0);
-    fprintf(dispatcher_file, "TIME %lld: read cmd line: %s\n", diff/1000, line);
+    if (line != NULL) fprintf(dispatcher_file, "TIME %lld: read cmd line: %s", diff/1000, line);
 }
 
 struct job_node* delete_and_free_last(struct job_node *head)
