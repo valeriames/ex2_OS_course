@@ -152,7 +152,10 @@ void * thread_func(void *arg) //need to go through it, Gadis implemintation as p
         
         
         char line[MAX_LINE_LENGTH];
+        char saved_line[MAX_LINE_LENGTH]; //save original line 
+        
         strcpy(line, last->job_text);
+        strcpy(saved_line, line);
         //printf("thread %d woke up and took: %s\n", thread_id, line);
         // printf("the line we want to execute %s\n", last->job_text);
         // parse_worker_line(last->job_text);
@@ -168,11 +171,12 @@ void * thread_func(void *arg) //need to go through it, Gadis implemintation as p
         //we start working on the command only after unlocking the queue mutex
         time(&end_time);
         printf("the line we want to execute %s\n", line);
+        
         parse_worker_line(line, thread_id);
         busy_list[thread_id]=false;
         time(&end_time);
         long long elapsed = (long long)difftime(end_time, start_time)/1000;
-        if (log_handler == 1) print_to_thread_file(thread_id, elapsed, line, "END");
+        if (log_handler == 1) print_to_thread_file(thread_id, elapsed, saved_line, "END");
 
         pthread_cond_signal(&dispatcher_wait);
     }
