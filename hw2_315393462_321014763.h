@@ -111,7 +111,7 @@ FILE* create_dispatcher_file()
 void create_stats_file(long long sum_jobs_time, long long min_job, long long average_job, long long max_job)
 {
     gettimeofday(&end_time, 0);
-    long long elapsed = (end_time.tv_sec - start_time.tv_sec)*1000LL + (end_time.tv_usec - start_time.tv_usec); //total running time 
+    long long elapsed = (end_time.tv_sec - start_time.tv_sec)*1000LL + (end_time.tv_usec - start_time.tv_usec)/1000; //total running time 
     FILE *stats_file; 
     stats_file = fopen("stats.txt", "w+");
     if (stats_file == NULL)
@@ -133,7 +133,7 @@ max job turnaround time: %lld milliseconds\n"\
 long long print_to_thread_file(int thread_id, char* command, char* start_or_end) //writes runtimes to thread txt files and returns the time 
 {
     gettimeofday(&end_time, 0);
-    long long elapsed = (end_time.tv_sec - start_time.tv_sec)*1000LL + (end_time.tv_usec - start_time.tv_usec);
+    long long elapsed = (end_time.tv_sec - start_time.tv_sec)*1000LL + (end_time.tv_usec - start_time.tv_usec)/1000;
     fprintf(thread_array[thread_id], "TIME %lld: %s job %s" , elapsed, start_or_end, command); //for now time is 0sec
 
     return elapsed;
@@ -142,7 +142,7 @@ long long print_to_thread_file(int thread_id, char* command, char* start_or_end)
 long long print_to_dispatcher_file (char* line )//writes runtimes to dispatcher txt files and returns the time 
 {
     gettimeofday(&dispatcher_start_time, 0);
-    long long elapsed = (dispatcher_start_time.tv_sec - start_time.tv_sec)*1000LL + (dispatcher_start_time.tv_usec - start_time.tv_usec);
+    long long elapsed = (dispatcher_start_time.tv_sec - start_time.tv_sec)*1000LL + (dispatcher_start_time.tv_usec - start_time.tv_usec)/1000;
     if (line != NULL) fprintf(dispatcher_file, "TIME %lld: read cmd line: %s", elapsed, line);
 
     return elapsed;
@@ -216,7 +216,7 @@ void * thread_func(void *arg)  //gets thread to run job from instruction file
         else 
         {
             gettimeofday(&end_time, 0);
-            td->end_time = (end_time.tv_sec - start_time.tv_sec)*1000LL + (end_time.tv_usec - start_time.tv_usec);
+            td->end_time = (end_time.tv_sec - start_time.tv_sec)*1000LL + (end_time.tv_usec - start_time.tv_usec)/1000;
         }
 
         //printf("before modification: thread end time is: %lld \n", td->end_time);
@@ -391,7 +391,7 @@ void dispatcher_execute(char *word, char *line)
     else
     {
         gettimeofday(&dispatcher_start_time, 0);
-        dispatcher_start = (dispatcher_start_time.tv_sec - start_time.tv_sec)*1000LL + (dispatcher_start_time.tv_usec - start_time.tv_usec);
+        dispatcher_start = (dispatcher_start_time.tv_sec - start_time.tv_sec)*1000LL + (dispatcher_start_time.tv_usec - start_time.tv_usec)/1000;
     }
 
     if (strstr(word, "dispatcher_msleep"))
