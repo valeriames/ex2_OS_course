@@ -27,9 +27,18 @@ int main(int argc, char **argv)
         printf("Error: incompatible num of arguments\n");
         exit(-1);
     }
+
     num_of_threads = atoi(argv[2]); //num threads that are created according to command
     num_of_files = atoi(argv[3]);
     log_handler = atoi(argv[4]);
+
+    if (num_of_files == 0 && num_of_files == 0) {
+        if (log_handler == 0) exit(0);
+        else if (log_handler == 1) {
+            create_stats_file(0,0,0,0);
+            exit(0);
+        }
+    }
     //int *result;
     file_array=create_num_counter_file(num_of_files);
     initialize_dispatcher(); //creates required number of threads

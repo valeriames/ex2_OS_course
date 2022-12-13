@@ -317,7 +317,8 @@ void parse_worker_line(char *command, int thread_id) //parsing between different
     char *next_commands; 
     
     line_ptr = strtok_r(command, ";", &remain);
-
+    printf("REMAIN IS: %s\n", line_ptr);
+    
     while(line_ptr != NULL)
     {   
         if (strstr(line_ptr, "repeat"))
@@ -329,19 +330,14 @@ void parse_worker_line(char *command, int thread_id) //parsing between different
             strcpy(temp_line, remain); 
             
             
-            temp_line = strtok(temp_line, ";");
+            temp_line = strtok_r(temp_line, ";", &remain);
             while(temp_line != NULL)
             {
                 //printf("\n\n\n\n00000000000000000000000000000\n\n\ntemp line is: %s\n00000000000000000000000000000\n\n\n\n", temp_line);
-                for (int i = 0; i<atoi(num)-1; i++) execute_worker_command(temp_line);
-                temp_line=strtok(NULL, ";");
+                for (int i = 0; i<atoi(num); i++) execute_worker_command(temp_line);
+                temp_line=strtok_r(NULL, ";", &remain);
             }
             
-            // for (int i=0; i<atoi(num); i++) //we are already in the first execution so need to iterate -1 times.
-            // {
-            //     //printf("$$$$$$$$$$$$$\n\nThe remain is: %s\nthread is is: %d\n\n$$$$$$$$$$$$$\n", remain, thread_id);
-            //    parse_worker_line(remain, thread_id);
-            // }
         }
         //printf("next command is %s\n", line_ptr);
         execute_worker_command(line_ptr);
@@ -350,7 +346,7 @@ void parse_worker_line(char *command, int thread_id) //parsing between different
     }
 }
 
-    
+
 void execute_worker_command(char command[MAX_LINE_LENGTH]) 
 {
     char *remain=command;
