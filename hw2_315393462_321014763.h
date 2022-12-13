@@ -20,6 +20,7 @@ struct thread_data_s  //this is the data the thread gets when it is made
 {
     int thread_id;
     int answer;
+    long long end_time; 
 } thread_data_s;
 
 struct job_node // I implemented the job queue as connected list
@@ -40,7 +41,8 @@ bool busy_list[MAX_NUM_THREADS]={false}; // this array tells us if a thread is w
 struct timeval start_time, end_time, dispatcher_start_time;
 int log_handler, num_of_files, num_of_threads, line_counter, thread_j = 0; 
 long long thread_end, thread_start, dispatcher_start;
-long long *thread_end_counter;
+long long *thread_end_counter, *dispatcher_count;
+long long sum_jobs=0, min_job = LLONG_MAX, max_job = LLONG_MIN, average_job=0; 
 
 FILE* *create_num_counter_file(int counter) //part of dispatcher initiallization
 {
@@ -106,7 +108,7 @@ FILE* create_dispatcher_file()
     return dispatcher_file;
 }
 
-void create_stats_file(long long sum_jobs_turnaround_time, long long min_job, long long average_job, long long max_job)
+void create_stats_file(long long sum_jobs_time, long long min_job, long long average_job, long long max_job)
 {
     gettimeofday(&end_time, 0);
     long long elapsed = (end_time.tv_sec - start_time.tv_sec)*1000LL + (end_time.tv_usec - start_time.tv_usec); //total running time 
@@ -123,7 +125,7 @@ sum of jobs turnaround time: %lld milliseconds\n\
 min job turnaround time: %lld milliseconds\n\
 average job turnaround time: %f milliseconds\n\
 max job turnaround time: %lld milliseconds\n"\
-, elapsed, sum_jobs_turnaround_time, min_job, (double)average_job, max_job);
+, elapsed, sum_jobs_time, min_job, (double)average_job, max_job);
 
     fclose(stats_file);
 }
@@ -146,6 +148,13 @@ long long print_to_dispatcher_file (char* line )//writes runtimes to dispatcher 
     return elapsed;
 }
 
+void prepare_stats(long long end_time)
+{
+    if (end_time>max_job) max_job=end_time;
+    if (end_time<min_job) min_job=end_time;
+    sum_jobs+=end_time;
+}
+
 struct job_node* delete_and_free_last(struct job_node *head) 
 {
     struct job_node *second_last=head, *last=head;
@@ -165,11 +174,9 @@ struct job_node* delete_and_free_last(struct job_node *head)
 void * thread_func(void *arg)  //gets thread to run job from instruction file 
 {
     struct thread_data_s* td = (struct thread_data_s *)arg;
-    int thread_id, *answer;
+    int thread_id, *answer, index=0;
     thread_id = td->thread_id;
-    thread_end_counter = malloc(sizeof(long long)*line_counter);
     
-   
     while (1)
     {
         
@@ -203,17 +210,22 @@ void * thread_func(void *arg)  //gets thread to run job from instruction file
 
         if (log_handler == 1) //if log =1 it saves all timing data of when thread was done 
         {
-            thread_end = print_to_thread_file(thread_id, saved_line, "END");
-            
-            //printf("\n\n thread_end : %lld, index: %d, lines: %d\n\n", thread_end, thread_j , line_counter);
+            td->end_time = print_to_thread_file(thread_id, saved_line, "END");
+            printf("td->end_time is: %lld\n", td->end_time);
         }
         else 
         {
             gettimeofday(&end_time, 0);
-            thread_end  = (end_time.tv_sec - start_time.tv_sec)*1000LL + (end_time.tv_usec - start_time.tv_usec);
+            td->end_time = (end_time.tv_sec - start_time.tv_sec)*1000LL + (end_time.tv_usec - start_time.tv_usec);
         }
-        thread_end_counter[thread_j] = thread_end; 
-        thread_j++;
+
+        //printf("before modification: thread end time is: %lld \n", td->end_time);
+        td->end_time = td->end_time - dispatcher_count[index];
+        //printf("after modification: thread time is: %lld \n             dispatcher time is: %lld \n", td->end_time, dispatcher_count[0]);
+        index++;
+
+        prepare_stats(td->end_time);
+
 
         pthread_cond_signal(&dispatcher_wait);
     }
@@ -229,7 +241,7 @@ void initialize_dispatcher()
     for (int i=0; i<num_of_threads; i++)
     {
         thread_data.thread_id =i;
-        pthread_create(&tid, NULL, thread_func, (void *) &thread_data); //error in this thread_func, therefore commented out for now 
+        pthread_create(&tid, NULL, thread_func, (void *) &thread_data); 
         if (log_handler == 1) thread_array = create_thread_files(i);
         //printf("we created thread number %d!! :)\n", i);
         
@@ -237,6 +249,7 @@ void initialize_dispatcher()
     }
     
     if (log_handler == 1) dispatcher_file = create_dispatcher_file();
+
 }
 
 
@@ -357,12 +370,6 @@ void execute_worker_command(char command[MAX_LINE_LENGTH])
         //printf("work is: %s, integer is: %s\n", "decrement", num);
         increment_decrement_or_sleep("decrement", atoi(num));
     }
-    //else if (strstr(command, "repeat"))
-    //{
-        //line_command_ptr = strtok_r(command, ";", &remain);
-        //for (int j=0; j<num; j++) execute_worker_command(line_command_ptr); 
-    //}
-
 }
 
 bool check_busy()
@@ -449,8 +456,8 @@ void dispatcher_work(FILE *commands_file)
     char word[MAX_LINE_LENGTH]; //this will be a list of words in the specific line
     line_counter=0;
 
-    long long sum_jobs_turnaround=0, min_job = LLONG_MAX, max_job = LLONG_MIN, average_job=0; 
-    long long *dispatcher_count = malloc(sizeof(long long)); //documentation of how much time passed since start of running untill the time we called the dispatcher again 
+    
+    dispatcher_count = malloc(sizeof(long long)); //documentation of how much time passed since start of running untill the time we called the dispatcher again 
 
     while(fgets(line, MAX_LINE_LENGTH, commands_file))
     {
@@ -482,23 +489,16 @@ void dispatcher_work(FILE *commands_file)
     
     printf("\n\nwe finished running !!!!\n\n now creating stats.txt\n\n");
 
-    for (int j = 0; j<line_counter; j++)
-    {
-        //printf("checking values: dispatcher %lld, thread: %lld\n\n\n\n", dispatcher_count[j], thread_end_counter[j]);
-        long long value = thread_end_counter[j] - dispatcher_count[j]; 
-        sum_jobs_turnaround += value;
-        if (value < min_job) min_job = value;
-        if (value > max_job) max_job = value; 
-    }
     
-    average_job = sum_jobs_turnaround/((long long)line_counter);
-
-    create_stats_file(sum_jobs_turnaround, min_job, average_job, max_job);
+    average_job = sum_jobs/((long long)line_counter);
+    create_stats_file(sum_jobs, min_job, average_job, max_job);
     print_results();
     close_files(num_of_files, file_array);
-    //close_files(num_of_threads, thread_array); //segmentation fault
-    //fclose(dispatcher_file); //segmentation fault
+    if (log_handler == 1)
+    {
+        close_files(num_of_threads, thread_array); //segmentation fault
+        fclose(dispatcher_file); //segmentation fault
+    }
     free(dispatcher_count);
-    free(thread_end_counter);
     
 }
