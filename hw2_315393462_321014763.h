@@ -42,7 +42,7 @@ struct timeval start_time, end_time, dispatcher_start_time;
 int log_handler, num_of_files, num_of_threads, line_counter, thread_j = 0; 
 long long thread_end, thread_start, dispatcher_start;
 long long *thread_end_counter, *dispatcher_count;
-long long sum_jobs=0, min_job = LLONG_MAX, max_job = LLONG_MIN, average_job=0; 
+long long sum_jobs=0, min_job = LLONG_MAX, max_job = LLONG_MIN, average_job=0, counter_job=0; 
 
 FILE* *create_num_counter_file(int counter) //part of dispatcher initiallization
 {
@@ -268,7 +268,7 @@ char* parse_line(char *line, char *word, char *pattern)
     return line;
 }
 
-void increment_decrement_or_sleep(char *work, int integer) //implemintation of worker commands 
+void increment_decrement(char *work, int integer) //implemintation of worker commands 
 {
     char num[MAX_LINE_LENGTH]; 
     char *line_command; 
@@ -283,16 +283,21 @@ void increment_decrement_or_sleep(char *work, int integer) //implemintation of w
         rewind(file_array[integer]);
         fgets(num, MAX_LINE_LENGTH, file_array[integer]);
         //printf("counter value read is %s\n", num);
+        char filename[20];
+        if (integer<10)
+            snprintf(filename, 24, "count0%d.txt", integer);
+        else
+            snprintf(filename, 24, "count%d.txt", integer);
         long long int counter=strtol(num, NULL, 10);
         if (!strcmp(work, "increment"))
             {
-                rewind(file_array[integer]);
-                fprintf(file_array[integer], "%lld\n", counter+1);
+                file_array[integer]=freopen(filename, "w+", file_array[integer]);
+                fprintf(file_array[integer], "%lld", counter+1);
                 //printf("counter in file %d changed from %s to %lld\n",integer, num, counter+1);
             }
         else if (!strcmp(work, "decrement"))
             {
-                rewind(file_array[integer]);
+                file_array[integer]=freopen(filename, "w+", file_array[integer]);
                 fprintf(file_array[integer], "%lld\n", counter-1);
                 //printf("counter in file %d changed from %s to %lld\n", integer, num, counter-1);
             }
@@ -330,7 +335,7 @@ void parse_worker_line(char *command, int thread_id) //parsing between different
             strcpy(temp_line, remain); 
             
             
-            temp_line = strtok_r(temp_line, ";", &remain);
+            temp_line = strtok_r(temp_line, ";", &remain); //What did you do here?
             while(temp_line != NULL)
             {
                 //printf("\n\n\n\n00000000000000000000000000000\n\n\ntemp line is: %s\n00000000000000000000000000000\n\n\n\n", temp_line);
@@ -342,7 +347,6 @@ void parse_worker_line(char *command, int thread_id) //parsing between different
         //printf("next command is %s\n", line_ptr);
         execute_worker_command(line_ptr);
         line_ptr = strtok_r(NULL, ";", &remain);
-        
     }
 }
 
@@ -376,12 +380,12 @@ void execute_worker_command(char command[MAX_LINE_LENGTH])
         //DO STUFF
         //printf("work is: %s, integer is: %s\n", "increment", num);
         char num_file[MAX_LINE_LENGTH];
-        increment_decrement_or_sleep("increment", atoi(num));
+        increment_decrement("increment", atoi(num));
     }
     else if (strstr(command, "decrement"))
     {
         //printf("work is: %s, integer is: %s\n", "decrement", num);
-        increment_decrement_or_sleep("decrement", atoi(num));
+        increment_decrement("decrement", atoi(num));
     }
 }
 
@@ -475,12 +479,15 @@ void dispatcher_work(FILE *commands_file)
     while(fgets(line, MAX_LINE_LENGTH, commands_file))
     {
         //printf("line counter is:%d\n\n", line_counter);
+        //skip charchters that are not start of command
         
         if (strstr(line, "dispatcher_wait;"))
             dispatcher_execute("dispatcher_wait;", NULL);
         else
             {
-            strcpy(line,parse_line(line, word, " "));
+            char* after_first_word =parse_line(line, word, " "); //skip lines that don't contain command
+            if (after_first_word)
+                strcpy(line,after_first_word);
             dispatcher_execute(word, line);
             }
         
